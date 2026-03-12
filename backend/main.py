@@ -8,6 +8,7 @@ from supabase import create_client, Client
 import io
 from dotenv import load_dotenv
 import os
+from fastapi import Query
 
 app = FastAPI()
 
@@ -141,3 +142,16 @@ async def processar_planilha(
         
     except Exception as e:
         return {"erro": f"Erro ao ler arquivo: {str(e)}"}
+
+#nova rota que busca coordenadas em um unico endereço
+@app.get("/geolocalizar/")
+async def geolocalizar_endereco(
+    endereco: str = Query(..., description="Endereço para buscar as coordenadas")
+):
+    # Usamos a mesma função cascata (Nominatim -> Google) que você já criou!
+    lat, lon = buscar_coordenadas(endereco)
+    
+    if lat and lon:
+        return {"sucesso": True, "lat": lat, "lon": lon}
+    else:
+        return {"sucesso": False, "erro": "Não foi possível encontrar as coordenadas para este endereço."}

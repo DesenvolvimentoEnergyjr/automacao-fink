@@ -108,7 +108,11 @@
     <script>
         const URL_SUPABASE = "https://amdsexfmtwqgdihlyqti.supabase.co";
         const CHAVE_SUPABASE = "sb_publishable_xisIAK-FwYMFXirHON0GqA_XCQrp6St";
+        //Quando for enviar para o github, descomentar a linha abaixo e comentar a com o URL local!
         const URL_BACKEND_RENDER = "https://api-pdv-tracker.onrender.com/processar-planilha/"; 
+
+        //Quando for testar localmente, descomentar a linha abaixo e comentar a de cima!
+        //const URL_BACKEND_RENDER = "http://127.0.0.1:8000/processar-planilha/"
         
         const supabaseClient = window.supabase.createClient(URL_SUPABASE, CHAVE_SUPABASE);
         const parametrosUrl = new URLSearchParams(window.location.search);
@@ -377,32 +381,57 @@
             const novoEndereco = document.getElementById(`edit-endereco-${id}`).value;
 
             try {
+                // Encontra o PDV atual na nossa lista local
                 const index = todosOsPdvs.findIndex(p => p.id == id);
-                if (index > -1) {
-                    todosOsPdvs[index].status = novoStatus;
-                    todosOsPdvs[index].numero_pdv = novoNumero;
-                    todosOsPdvs[index].nome = novoNome;
-                    todosOsPdvs[index].endereco = novoEndereco;
+                if (index === -1) return;
+
+                const pdvAtual = todosOsPdvs[index];
+                let novaLat = pdvAtual.lat; // Começa com a coordenada antiga
+                let novaLon = pdvAtual.lon; // Começa com a coordenada antiga
+
+                // 1. VERIFICA SE O ENDEREÇO MUDOU
+                if (pdvAtual.endereco !== novoEndereco) {
+                    // Pega a URL base do seu backend (tirando o /processar-planilha/)
+                    const baseUrl = URL_BACKEND_RENDER.replace('/processar-planilha/', '');
+                    
+                    // 2. CHAMA O BACKEND PARA PEGAR AS COORDENADAS
+                    const response = await fetch(`${baseUrl}/geolocalizar/?endereco=${encodeURIComponent(novoEndereco)}`);
+                    const data = await response.json();
+
+                    if (data.sucesso) {
+                        novaLat = data.lat;
+                        novaLon = data.lon;
+                    } else {
+                        alert("Aviso: Não achamos as coordenadas exatas desse novo endereço. O pino continuará no local antigo.");
+                    }
                 }
+
+                // 3. ATUALIZA A MEMÓRIA LOCAL E O MAPA IMEDIATAMENTE
+                todosOsPdvs[index].status = novoStatus;
+                todosOsPdvs[index].numero_pdv = novoNumero;
+                todosOsPdvs[index].nome = novoNome;
+                todosOsPdvs[index].endereco = novoEndereco;
+                todosOsPdvs[index].lat = novaLat; // Atualiza latitude
+                todosOsPdvs[index].lon = novaLon; // Atualiza longitude
                 
                 map.closePopup(); 
-                renderizarPdvs(); 
+                renderizarPdvs(); // O mapa se redesenha com o pino na nova posição!
 
+                // 4. SALVA NO SUPABASE (agora incluindo lat e lon)
                 await supabaseClient.from('pdvs').update({ 
                     status: novoStatus,
                     numero_pdv: novoNumero,
                     nome: novoNome,
-                    endereco: novoEndereco
+                    endereco: novoEndereco,
+                    lat: novaLat,
+                    lon: novaLon
                 }).eq('id', id);
-
-                setTimeout(() => { carregarPdvsDoBanco(); }, 500);
 
             } catch (error) {
                 console.error("Erro ao salvar edição:", error);
-                alert("Erro ao salvar os dados no banco.");
+                alert("Erro ao tentar atualizar o endereço.");
             }
         }
-
         // -------------------------------
 
         function ativarRealtime() {
