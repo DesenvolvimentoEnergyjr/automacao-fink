@@ -71,6 +71,10 @@
         .form-edicao label { font-size: 12px; font-weight: bold; color: #555; display: block; margin-top: 8px; margin-bottom: 2px; }
         .form-edicao input, .form-edicao select { width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 13px; }
         .form-edicao select { background-color: #f8f9fa; cursor: pointer; }
+
+        /* Marcador de Localização dos Outros Usuários */
+        .other-user-marker { background-color: #ff5722; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
+        .other-user-pulse { width: 15px; height: 15px; background-color: #ff5722; border-radius: 50%; position: absolute; animation: pulse 2s infinite; }
     </style>
 </head>
 <body>
@@ -126,9 +130,60 @@
 
         let todosOsPdvs = [];
         let visaoAtual = 'pendente'; 
+        let meuUsuarioId = 'user-' + Math.random().toString(36).substr(2, 9); // Cria um ID aleatório para a sessão
+        let canalPresenca;
+        let marcadoresOutrosUsuarios = {}; // Guarda os pinos dos colegas
 
         if (grupoAtual) {
             iniciarApp();
+            
+        }
+
+        function ativarMultiplayer() {
+            // Cria um canal de presença exclusivo para este grupo
+            canalPresenca = supabaseClient.channel('tracking_' + grupoAtual);
+
+            canalPresenca
+                .on('presence', { event: 'sync' }, () => {
+                    const estadoAtual = canalPresenca.presenceState();
+                    renderizarOutrosUsuarios(estadoAtual);
+                })
+                .subscribe();
+        }
+
+        function renderizarOutrosUsuarios(estado) {
+            const usuariosAtivosAgora = [];
+
+            // Passa por todos os usuários transmitindo no canal
+            for (const key in estado) {
+                const dados = estado[key][0]; // Pega a info mais recente
+                
+                // Ignora a nós mesmos (já temos nosso pino azul)
+                if (dados.id !== meuUsuarioId) {
+                    usuariosAtivosAgora.push(dados.id);
+                    
+                    if (marcadoresOutrosUsuarios[dados.id]) {
+                        // Se o pino do colega já existe, só move ele
+                        marcadoresOutrosUsuarios[dados.id].setLatLng([dados.lat, dados.lng]);
+                    } else {
+                        // Se o colega acabou de entrar, cria um pino novo pra ele
+                        const iconOutro = L.divIcon({
+                            className: 'other-user-marker',
+                            html: '<div class="other-user-pulse"></div>',
+                            iconSize: [15, 15]
+                        });
+                        marcadoresOutrosUsuarios[dados.id] = L.marker([dados.lat, dados.lng], { icon: iconOutro, zIndexOffset: 900 }).addTo(map);
+                    }
+                }
+            }
+
+            // Remove os pinos de quem fechou o site ou saiu do grupo
+            for (const idColega in marcadoresOutrosUsuarios) {
+                if (!usuariosAtivosAgora.includes(idColega)) {
+                    map.removeLayer(marcadoresOutrosUsuarios[idColega]);
+                    delete marcadoresOutrosUsuarios[idColega];
+                }
+            }
         }
 
         function acessarGrupo() {
@@ -158,7 +213,7 @@
 
             adicionarBotaoCentralizar();
             configurarLocalizacaoEmTempoReal();
-
+            ativarMultiplayer()
             carregarPdvsDoBanco();
             ativarRealtime();
         }
@@ -194,6 +249,7 @@
                     const { latitude, longitude, accuracy } = pos.coords;
                     minhaPosicaoAtual = { lat: latitude, lng: longitude };
 
+                    // 1. Atualiza o seu próprio mapa
                     if (!userMarker) {
                         const userIcon = L.divIcon({
                             className: 'user-location-marker',
@@ -208,6 +264,15 @@
                         userMarker.setLatLng([latitude, longitude]);
                         userAccuracyCircle.setLatLng([latitude, longitude]);
                         userAccuracyCircle.setRadius(accuracy);
+                    }
+
+                    // 2. TRANSMITE a sua nova localização para os colegas do grupo!
+                    if (canalPresenca) {
+                        canalPresenca.track({ 
+                            id: meuUsuarioId, 
+                            lat: latitude, 
+                            lng: longitude 
+                        });
                     }
                 },
                 (err) => console.warn(err),
