@@ -41,9 +41,14 @@
         .pin-concluido .custom-pin { background-color: #28a745; }
         .pin-problema .custom-pin { background-color: #dc3545; }
 
-        /* Estilo do Marcador de Localização (Usuário) */
+        /* Estilo do Marcador de Localização (Seu Usuário) */
         .user-location-marker { background-color: #2c7efc; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
         .user-location-pulse { width: 15px; height: 15px; background-color: #2c7efc; border-radius: 50%; position: absolute; animation: pulse 2s infinite; }
+        
+        /* Estilo do Marcador de Localização (Outros Usuários) */
+        .other-user-marker { background-color: #ff5722; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
+        .other-user-pulse { width: 15px; height: 15px; background-color: #ff5722; border-radius: 50%; position: absolute; animation: pulse 2s infinite; }
+
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
 
         /* Botão de Centralizar (Floating Button) */
@@ -72,12 +77,33 @@
         .form-edicao input, .form-edicao select { width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 13px; }
         .form-edicao select { background-color: #f8f9fa; cursor: pointer; }
 
-        /* Marcador de Localização dos Outros Usuários */
-        .other-user-marker { background-color: #ff5722; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
-        .other-user-pulse { width: 15px; height: 15px; background-color: #ff5722; border-radius: 50%; position: absolute; animation: pulse 2s infinite; }
+        /* Modal de Confirmação */
+        #modal-confirmacao {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 4000; 
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: #fff; padding: 25px; border-radius: 10px; width: 300px;
+            text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        .modal-card h3 { margin-top: 0; color: #333; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        .modal-card p { color: #555; font-size: 15px; margin-bottom: 20px; }
+        .botoes-modal { display: flex; gap: 10px; }
     </style>
 </head>
 <body>
+
+    <div id="modal-confirmacao">
+        <div class="modal-card">
+            <h3>Confirmação</h3>
+            <p id="texto-confirmacao">Tem certeza que deseja fazer isso?</p>
+            <div class="botoes-modal">
+                <button class="btn-primario" style="background:#007bff; flex:1;" onclick="executarAcaoPendente()">Sim</button>
+                <button class="btn-primario" style="background:#6c757d; flex:1;" onclick="fecharModal()">Não</button>
+            </div>
+        </div>
+    </div>
 
     <div id="tela-inicial">
         <div class="login-card">
@@ -112,10 +138,10 @@
     <script>
         const URL_SUPABASE = "https://amdsexfmtwqgdihlyqti.supabase.co";
         const CHAVE_SUPABASE = "sb_publishable_xisIAK-FwYMFXirHON0GqA_XCQrp6St";
-        //Quando for enviar para o github, descomentar a linha abaixo e comentar a com o URL local!
+        // Quando for enviar para o github, descomentar a linha abaixo e comentar a com o URL local!
         const URL_BACKEND_RENDER = "https://api-pdv-tracker.onrender.com/processar-planilha/"; 
 
-        //Quando for testar localmente, descomentar a linha abaixo e comentar a de cima!
+        // Quando for testar localmente, descomentar a linha abaixo e comentar a de cima!
         //const URL_BACKEND_RENDER = "http://127.0.0.1:8000/processar-planilha/"
         
         const supabaseClient = window.supabase.createClient(URL_SUPABASE, CHAVE_SUPABASE);
@@ -127,63 +153,17 @@
         let userMarker;
         let userAccuracyCircle;
         let minhaPosicaoAtual = null;
-
         let todosOsPdvs = [];
         let visaoAtual = 'pendente'; 
-        let meuUsuarioId = 'user-' + Math.random().toString(36).substr(2, 9); // Cria um ID aleatório para a sessão
+        // --- Variáveis do Multiplayer ---
+        let meuUsuarioId = 'user-' + Math.random().toString(36).substr(2, 9);
         let canalPresenca;
-        let marcadoresOutrosUsuarios = {}; // Guarda os pinos dos colegas
+        let marcadoresOutrosUsuarios = {};
+        // --- Variável de Controle do Modal ---
+        let acaoPendente = null;
 
         if (grupoAtual) {
             iniciarApp();
-            
-        }
-
-        function ativarMultiplayer() {
-            // Cria um canal de presença exclusivo para este grupo
-            canalPresenca = supabaseClient.channel('tracking_' + grupoAtual);
-
-            canalPresenca
-                .on('presence', { event: 'sync' }, () => {
-                    const estadoAtual = canalPresenca.presenceState();
-                    renderizarOutrosUsuarios(estadoAtual);
-                })
-                .subscribe();
-        }
-
-        function renderizarOutrosUsuarios(estado) {
-            const usuariosAtivosAgora = [];
-
-            // Passa por todos os usuários transmitindo no canal
-            for (const key in estado) {
-                const dados = estado[key][0]; // Pega a info mais recente
-                
-                // Ignora a nós mesmos (já temos nosso pino azul)
-                if (dados.id !== meuUsuarioId) {
-                    usuariosAtivosAgora.push(dados.id);
-                    
-                    if (marcadoresOutrosUsuarios[dados.id]) {
-                        // Se o pino do colega já existe, só move ele
-                        marcadoresOutrosUsuarios[dados.id].setLatLng([dados.lat, dados.lng]);
-                    } else {
-                        // Se o colega acabou de entrar, cria um pino novo pra ele
-                        const iconOutro = L.divIcon({
-                            className: 'other-user-marker',
-                            html: '<div class="other-user-pulse"></div>',
-                            iconSize: [15, 15]
-                        });
-                        marcadoresOutrosUsuarios[dados.id] = L.marker([dados.lat, dados.lng], { icon: iconOutro, zIndexOffset: 900 }).addTo(map);
-                    }
-                }
-            }
-
-            // Remove os pinos de quem fechou o site ou saiu do grupo
-            for (const idColega in marcadoresOutrosUsuarios) {
-                if (!usuariosAtivosAgora.includes(idColega)) {
-                    map.removeLayer(marcadoresOutrosUsuarios[idColega]);
-                    delete marcadoresOutrosUsuarios[idColega];
-                }
-            }
         }
 
         function acessarGrupo() {
@@ -213,10 +193,80 @@
 
             adicionarBotaoCentralizar();
             configurarLocalizacaoEmTempoReal();
-            ativarMultiplayer()
+
             carregarPdvsDoBanco();
             ativarRealtime();
+            ativarMultiplayer(); 
         }
+
+        // --- FUNÇÕES DO MODAL ---
+        function pedirConfirmacao(mensagem, acao, id) {
+            document.getElementById('texto-confirmacao').innerText = mensagem;
+            document.getElementById('modal-confirmacao').style.display = 'flex';
+            acaoPendente = { acao: acao, id: id };
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-confirmacao').style.display = 'none';
+            acaoPendente = null;
+        }
+
+        function executarAcaoPendente() {
+            if (!acaoPendente) return;
+            
+            const { acao, id } = acaoPendente;
+            fecharModal(); 
+            
+            if (acao === 'concluido' || acao === 'problema') {
+                alterarStatus(id, acao);
+            } else if (acao === 'salvar_edicao') {
+                salvarEdicao(id);
+            }
+        }
+        // ------------------------
+
+        // --- FUNÇÕES DE MULTIPLAYER ---
+        function ativarMultiplayer() {
+            canalPresenca = supabaseClient.channel('tracking_' + grupoAtual);
+
+            canalPresenca
+                .on('presence', { event: 'sync' }, () => {
+                    const estadoAtual = canalPresenca.presenceState();
+                    renderizarOutrosUsuarios(estadoAtual);
+                })
+                .subscribe();
+        }
+
+        function renderizarOutrosUsuarios(estado) {
+            const usuariosAtivosAgora = [];
+
+            for (const key in estado) {
+                const dados = estado[key][0]; 
+                
+                if (dados.id !== meuUsuarioId) {
+                    usuariosAtivosAgora.push(dados.id);
+                    
+                    if (marcadoresOutrosUsuarios[dados.id]) {
+                        marcadoresOutrosUsuarios[dados.id].setLatLng([dados.lat, dados.lng]);
+                    } else {
+                        const iconOutro = L.divIcon({
+                            className: 'other-user-marker',
+                            html: '<div class="other-user-pulse"></div>',
+                            iconSize: [15, 15]
+                        });
+                        marcadoresOutrosUsuarios[dados.id] = L.marker([dados.lat, dados.lng], { icon: iconOutro, zIndexOffset: 900 }).addTo(map);
+                    }
+                }
+            }
+
+            for (const idColega in marcadoresOutrosUsuarios) {
+                if (!usuariosAtivosAgora.includes(idColega)) {
+                    map.removeLayer(marcadoresOutrosUsuarios[idColega]);
+                    delete marcadoresOutrosUsuarios[idColega];
+                }
+            }
+        }
+        // ------------------------------
 
         function adicionarBotaoCentralizar() {
             const CenterControl = L.Control.extend({
@@ -249,7 +299,6 @@
                     const { latitude, longitude, accuracy } = pos.coords;
                     minhaPosicaoAtual = { lat: latitude, lng: longitude };
 
-                    // 1. Atualiza o seu próprio mapa
                     if (!userMarker) {
                         const userIcon = L.divIcon({
                             className: 'user-location-marker',
@@ -266,7 +315,7 @@
                         userAccuracyCircle.setRadius(accuracy);
                     }
 
-                    // 2. TRANSMITE a sua nova localização para os colegas do grupo!
+                    // Transmite a nova localização para o grupo
                     if (canalPresenca) {
                         canalPresenca.track({ 
                             id: meuUsuarioId, 
@@ -321,7 +370,6 @@
                 container.innerHTML = `<p style="text-align:center; color:green;"><b>${msg}</b></p>`;
             }
 
-            // Renderiza a lista lateral
             pdvsFiltrados.forEach(pdv => {
                 const card = document.createElement('div');
                 card.className = 'pdv-card ' + pdv.status;
@@ -329,12 +377,12 @@
                 let botoesHtml = '';
                 if (visaoAtual === 'pendente') {
                     botoesHtml = `
-                        <button class="btn-primario" style="background:#28a745; flex: 1;" onclick="alterarStatus(${pdv.id}, 'concluido')">✔ Feito</button>
-                        <button class="btn-primario" style="background:#dc3545; flex: 1;" onclick="alterarStatus(${pdv.id}, 'problema')">✖ Erro</button>
+                        <button class="btn-primario" style="background:#28a745; flex: 1;" onclick="pedirConfirmacao('Marcar este PDV como CONCLUÍDO?', 'concluido', ${pdv.id})">✔ Feito</button>
+                        <button class="btn-primario" style="background:#dc3545; flex: 1;" onclick="pedirConfirmacao('Reportar ERRO neste PDV?', 'problema', ${pdv.id})">✖ Erro</button>
                     `;
                 } else if (visaoAtual === 'problema') {
                     botoesHtml = `
-                        <button class="btn-primario" style="background:#28a745; width: 100%;" onclick="alterarStatus(${pdv.id}, 'concluido')">✔ Marcar como Feito</button>
+                        <button class="btn-primario" style="background:#28a745; width: 100%;" onclick="pedirConfirmacao('O problema foi resolvido? Marcar como FEITO.', 'concluido', ${pdv.id})">✔ Marcar como Feito</button>
                     `;
                 }
 
@@ -348,7 +396,6 @@
                 container.appendChild(card);
             });
 
-            // Lógica para separar PDVs com coordenadas idênticas no Mapa
             const coordenadasUsadas = {};
 
             todosOsPdvs.forEach(pdv => {
@@ -356,16 +403,12 @@
                     let lat = parseFloat(pdv.lat);
                     let lon = parseFloat(pdv.lon);
                     
-                    // Cria uma chave única para a coordenada arredondando um pouco
                     let chaveCoord = `${lat.toFixed(5)},${lon.toFixed(5)}`;
                     
                     if (coordenadasUsadas[chaveCoord]) {
-                        // Se já tem um ping lá, a gente empurra o novo para o lado
                         let contagem = coordenadasUsadas[chaveCoord];
-                        
-                        // Fórmula para criar um círculo em volta do ponto original
-                        let angulo = contagem * (Math.PI / 4); // Distribui em 45 graus
-                        let raio = 0.00015; // Aproximadamente 15 metros no mapa
+                        let angulo = contagem * (Math.PI / 4); 
+                        let raio = 0.00015; 
                         
                         lat += Math.sin(angulo) * raio;
                         lon += Math.cos(angulo) * raio;
@@ -382,23 +425,20 @@
                         iconAnchor: [15, 30] 
                     });
 
-                    // Usa as novas coordenadas (lat, lon) modificadas para renderizar o ping
                     L.marker([lat, lon], { icon }).addTo(camadaPdvs)
                     .bindPopup(`
                         <div id="popup-container-${pdv.id}">
                             <b>${pdv.numero_pdv} - ${pdv.nome}</b><br>
                             Status: <b>${pdv.status.toUpperCase()}</b><br>
                             <hr>
-                            <button class="btn-primario" style="background:#28a745; width:100%;" onclick="alterarStatus(${pdv.id}, 'concluido')">✔ Marcar Concluído</button>
-                            <button class="btn-primario" style="background:#dc3545; width:100%; margin-top:5px;" onclick="alterarStatus(${pdv.id}, 'problema')">✖ Relatar Problema</button>
+                            <button class="btn-primario" style="background:#28a745; width:100%;" onclick="pedirConfirmacao('Marcar este PDV como CONCLUÍDO?', 'concluido', ${pdv.id})">✔ Marcar Concluído</button>
+                            <button class="btn-primario" style="background:#dc3545; width:100%; margin-top:5px;" onclick="pedirConfirmacao('Reportar ERRO neste PDV?', 'problema', ${pdv.id})">✖ Relatar Problema</button>
                             <button class="btn-primario" style="background:#ffc107; color:#333; width:100%; margin-top:5px;" onclick="abrirEdicaoPdv(event, ${pdv.id})">✏️ Editar PDV</button>
                         </div>
                     `);
                 }
             });
         }
-
-        // --- FUNÇÕES DE EDIÇÃO CORRIGIDAS ---
 
         function abrirEdicaoPdv(event, id) {
             event.stopPropagation(); 
@@ -431,7 +471,7 @@
                         <input type="text" id="edit-endereco-${id}" value="${pdv.endereco}">
 
                         <div style="display: flex; gap: 5px; margin-top: 15px;">
-                            <button type="button" class="btn-primario" style="background:#007bff; flex: 1; margin-top: 0;" onclick="salvarEdicao(${id})">💾 Salvar</button>
+                            <button type="button" class="btn-primario" style="background:#007bff; flex: 1; margin-top: 0;" onclick="pedirConfirmacao('Deseja salvar as alterações neste PDV?', 'salvar_edicao', ${id})">💾 Salvar</button>
                             <button type="button" class="btn-primario" style="background:#6c757d; flex: 1; margin-top: 0;" onclick="map.closePopup()">❌ Cancelar</button>
                         </div>
                     </div>
@@ -446,20 +486,16 @@
             const novoEndereco = document.getElementById(`edit-endereco-${id}`).value;
 
             try {
-                // Encontra o PDV atual na nossa lista local
                 const index = todosOsPdvs.findIndex(p => p.id == id);
                 if (index === -1) return;
 
                 const pdvAtual = todosOsPdvs[index];
-                let novaLat = pdvAtual.lat; // Começa com a coordenada antiga
-                let novaLon = pdvAtual.lon; // Começa com a coordenada antiga
+                let novaLat = pdvAtual.lat; 
+                let novaLon = pdvAtual.lon; 
 
-                // 1. VERIFICA SE O ENDEREÇO MUDOU
                 if (pdvAtual.endereco !== novoEndereco) {
-                    // Pega a URL base do seu backend (tirando o /processar-planilha/)
                     const baseUrl = URL_BACKEND_RENDER.replace('/processar-planilha/', '');
                     
-                    // 2. CHAMA O BACKEND PARA PEGAR AS COORDENADAS
                     const response = await fetch(`${baseUrl}/geolocalizar/?endereco=${encodeURIComponent(novoEndereco)}`);
                     const data = await response.json();
 
@@ -471,18 +507,16 @@
                     }
                 }
 
-                // 3. ATUALIZA A MEMÓRIA LOCAL E O MAPA IMEDIATAMENTE
                 todosOsPdvs[index].status = novoStatus;
                 todosOsPdvs[index].numero_pdv = novoNumero;
                 todosOsPdvs[index].nome = novoNome;
                 todosOsPdvs[index].endereco = novoEndereco;
-                todosOsPdvs[index].lat = novaLat; // Atualiza latitude
-                todosOsPdvs[index].lon = novaLon; // Atualiza longitude
+                todosOsPdvs[index].lat = novaLat; 
+                todosOsPdvs[index].lon = novaLon; 
                 
                 map.closePopup(); 
-                renderizarPdvs(); // O mapa se redesenha com o pino na nova posição!
+                renderizarPdvs(); 
 
-                // 4. SALVA NO SUPABASE (agora incluindo lat e lon)
                 await supabaseClient.from('pdvs').update({ 
                     status: novoStatus,
                     numero_pdv: novoNumero,
@@ -497,7 +531,6 @@
                 alert("Erro ao tentar atualizar o endereço.");
             }
         }
-        // -------------------------------
 
         function ativarRealtime() {
             supabaseClient.channel('mudancas').on('postgres_changes', 
