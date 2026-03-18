@@ -94,12 +94,13 @@ def processar_em_segundo_plano(df, grupo_id, coluna_endereco):
         pdv_data = {
             "numero_pdv": pegar_dado('PDV', 'N/A'),
             "nome": pegar_dado('Nome', 'Desconhecido'),
-            "endereco": endereco_raw.replace('\n', ' '), # Salva no banco sem o \n
+            "endereco": endereco_raw.replace('\n', ' '), 
             "cnpj": pegar_dado('CNPJ', 'Sem CNPJ'),
             "lat": lat,
             "lon": lon,
             "status": "pendente",
-            "grupo_id": grupo_id
+            "grupo_id": grupo_id,
+            "pad_sub": pegar_dado('pad_sub', 'pad').lower()
         }
 
         try:
