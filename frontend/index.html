@@ -29,17 +29,27 @@
         .btn-primario:hover { filter: brightness(0.9); }
         .btn-secundario { background: none; color: #007bff; border: none; margin-top: 15px; cursor: pointer; text-decoration: underline; font-size: 0.9rem; }
         
-        /* Cards e Mapa */
+        /* Cards e Mapa (Padrão) */
         .pdv-card { background: #f8f9fa; padding: 15px; margin-bottom: 12px; border-radius: 8px; border-left: 6px solid #6c757d; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .pdv-card.pendente { border-left-color: #007bff; }
         .pdv-card.concluido { border-left-color: #28a745; opacity: 0.7; }
         .pdv-card.problema { border-left-color: #dc3545; }
+
+        /* Cards Substituição (SUB) */
+        .pdv-card.sub-pendente { border-left-color: #fd7e14; } /* Laranja */
+        .pdv-card.sub-concluido { border-left-color: #19692c; opacity: 0.8; } /* Verde escuro */
+        .pdv-card.sub-problema { border-left-color: #ff9999; } /* Vermelho clarinho */
         
-        /* Estilo dos Pinos */
+        /* Estilo dos Pinos (Padrão) */
         .custom-pin { width: 30px; height: 30px; border-radius: 50% 50% 50% 0; background: #6c757d; position: absolute; transform: rotate(-45deg); left: 50%; top: 50%; margin: -15px 0 0 -15px; border: 2px solid #fff; }
         .pin-pendente .custom-pin { background-color: #007bff; }
         .pin-concluido .custom-pin { background-color: #28a745; }
         .pin-problema .custom-pin { background-color: #dc3545; }
+
+        /* Estilo dos Pinos Substituição (SUB) */
+        .pin-sub-pendente .custom-pin { background-color: #fd7e14; }
+        .pin-sub-concluido .custom-pin { background-color: #19692c; }
+        .pin-sub-problema .custom-pin { background-color: #ff9999; }
 
         /* Estilo do Marcador de Localização (Seu Usuário) */
         .user-location-marker { background-color: #2c7efc; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
@@ -53,15 +63,8 @@
 
         /* Botão de Centralizar (Floating Button) */
         .btn-center-map {
-            background: white;
-            width: 44px; height: 44px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            cursor: pointer;
-            font-size: 24px;
-            color: #333;
-            transition: background 0.2s;
+            background: white; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+            border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: pointer; font-size: 24px; color: #333; transition: background 0.2s;
         }
         .btn-center-map:hover { background: #f0f0f0; }
         .btn-center-map:active { background: #ddd; }
@@ -70,6 +73,15 @@
         .abas-container { display: flex; gap: 5px; margin-bottom: 15px; }
         .btn-aba { flex: 1; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; transition: 0.3s; }
         .btn-aba.inativo { background-color: #6c757d; opacity: 0.6; }
+
+        /* Toggle de Substituição */
+        .toggle-container { margin-top: 15px; display: flex; align-items: center; justify-content: space-between; background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #ddd; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #fd7e14; }
+        input:checked + .slider:before { transform: translateX(18px); }
 
         /* Estilos do Formulário de Edição no Popup */
         .form-edicao { min-width: 220px; }
@@ -121,6 +133,15 @@
             <label><strong>Importar Planilha:</strong></label><br>
             <input type="file" id="uploadExcel" accept=".xlsx, .xls, .csv" style="margin-top:10px;"/>
         </div>
+
+        <div class="toggle-container">
+            <label style="font-size: 13px; font-weight: bold; color: #333;">Ver PDV's de substituição</label>
+            <label class="switch">
+                <input type="checkbox" id="toggle-sub" onchange="alternarSubs()">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <br>
         
         <div class="abas-container">
             <button id="btn-aba-pendente" class="btn-aba" style="background-color: #007bff;" onclick="mudarVisao('pendente')">Pendentes</button>
@@ -138,10 +159,10 @@
     <script>
         const URL_SUPABASE = "https://amdsexfmtwqgdihlyqti.supabase.co";
         const CHAVE_SUPABASE = "sb_publishable_xisIAK-FwYMFXirHON0GqA_XCQrp6St";
-        // Quando for enviar para o github, descomentar a linha abaixo e comentar a com o URL local!
+        //Quando for enviar para o github, descomentar a linha abaixo e comentar a com o URL local!
         const URL_BACKEND_RENDER = "https://api-pdv-tracker.onrender.com/processar-planilha/"; 
 
-        // Quando for testar localmente, descomentar a linha abaixo e comentar a de cima!
+        //Quando for testar localmente, descomentar a linha abaixo e comentar a de cima!
         //const URL_BACKEND_RENDER = "http://127.0.0.1:8000/processar-planilha/"
         
         const supabaseClient = window.supabase.createClient(URL_SUPABASE, CHAVE_SUPABASE);
@@ -155,11 +176,12 @@
         let minhaPosicaoAtual = null;
         let todosOsPdvs = [];
         let visaoAtual = 'pendente'; 
-        // --- Variáveis do Multiplayer ---
+        let mostrarSubstituicao = false; 
+
         let meuUsuarioId = 'user-' + Math.random().toString(36).substr(2, 9);
         let canalPresenca;
         let marcadoresOutrosUsuarios = {};
-        // --- Variável de Controle do Modal ---
+        
         let acaoPendente = null;
 
         if (grupoAtual) {
@@ -199,7 +221,11 @@
             ativarMultiplayer(); 
         }
 
-        // --- FUNÇÕES DO MODAL ---
+        function alternarSubs() {
+            mostrarSubstituicao = document.getElementById('toggle-sub').checked;
+            renderizarPdvs();
+        }
+
         function pedirConfirmacao(mensagem, acao, id) {
             document.getElementById('texto-confirmacao').innerText = mensagem;
             document.getElementById('modal-confirmacao').style.display = 'flex';
@@ -223,9 +249,7 @@
                 salvarEdicao(id);
             }
         }
-        // ------------------------
 
-        // --- FUNÇÕES DE MULTIPLAYER ---
         function ativarMultiplayer() {
             canalPresenca = supabaseClient.channel('tracking_' + grupoAtual);
 
@@ -266,18 +290,13 @@
                 }
             }
         }
-        // ------------------------------
 
         function adicionarBotaoCentralizar() {
             const CenterControl = L.Control.extend({
                 options: { position: 'bottomright' },
                 onAdd: function() {
                     const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                    div.innerHTML = `
-                        <div class="btn-center-map" title="Centralizar em mim">
-                            🎯
-                        </div>
-                    `;
+                    div.innerHTML = `<div class="btn-center-map" title="Centralizar em mim">🎯</div>`;
                     div.onclick = function() {
                         if (minhaPosicaoAtual) {
                             map.flyTo([minhaPosicaoAtual.lat, minhaPosicaoAtual.lng], 16);
@@ -315,7 +334,6 @@
                         userAccuracyCircle.setRadius(accuracy);
                     }
 
-                    // Transmite a nova localização para o grupo
                     if (canalPresenca) {
                         canalPresenca.track({ 
                             id: meuUsuarioId, 
@@ -363,7 +381,20 @@
             container.innerHTML = ''; 
             camadaPdvs.clearLayers(); 
 
-            const pdvsFiltrados = todosOsPdvs.filter(p => p.status === visaoAtual);
+            // Filtro de Status, Toggle (SUB) e Regra de Ocultar Erros de SUB
+            const pdvsFiltrados = todosOsPdvs.filter(p => {
+                if (p.status !== visaoAtual) return false;
+                
+                const isSub = p.pad_sub && p.pad_sub.toLowerCase() === 'sub';
+                
+                // Se for SUB e o toggle estiver desligado, esconde.
+                if (isSub && !mostrarSubstituicao) return false;
+                
+                // REGRA NOVA: Se for SUB e estiver na aba de "Problema", não mostra na lista!
+                if (isSub && visaoAtual === 'problema') return false;
+
+                return true;
+            });
 
             if (pdvsFiltrados.length === 0) {
                 const msg = visaoAtual === 'pendente' ? 'Tudo limpo! ✅' : 'Nenhum erro registrado! 🎉';
@@ -371,23 +402,31 @@
             }
 
             pdvsFiltrados.forEach(pdv => {
+                const isSub = pdv.pad_sub && pdv.pad_sub.toLowerCase() === 'sub';
+                const prefixoClasse = isSub ? 'sub-' : '';
+                const classeCardEPino = prefixoClasse + pdv.status; 
+
                 const card = document.createElement('div');
-                card.className = 'pdv-card ' + pdv.status;
+                card.className = 'pdv-card ' + classeCardEPino;
                 
+                const badgeHtml = isSub ? `<span style="background:#fd7e14; color:white; padding:2px 6px; border-radius:4px; font-size:10px; margin-left:5px;">SUBSTITUIÇÃO</span>` : '';
+                const textoFeito = isSub ? '✔ Utilizado' : '✔ Feito';
+                const textoMarcarFeito = isSub ? '✔ Marcar como Utilizado' : '✔ Marcar Concluído';
+
                 let botoesHtml = '';
                 if (visaoAtual === 'pendente') {
                     botoesHtml = `
-                        <button class="btn-primario" style="background:#28a745; flex: 1;" onclick="pedirConfirmacao('Marcar este PDV como CONCLUÍDO?', 'concluido', ${pdv.id})">✔ Feito</button>
+                        <button class="btn-primario" style="background:#28a745; flex: 1;" onclick="pedirConfirmacao('${isSub ? 'Marcar como UTILIZADO?' : 'Marcar este PDV como CONCLUÍDO?'}', 'concluido', ${pdv.id})">${textoFeito}</button>
                         <button class="btn-primario" style="background:#dc3545; flex: 1;" onclick="pedirConfirmacao('Reportar ERRO neste PDV?', 'problema', ${pdv.id})">✖ Erro</button>
                     `;
                 } else if (visaoAtual === 'problema') {
                     botoesHtml = `
-                        <button class="btn-primario" style="background:#28a745; width: 100%;" onclick="pedirConfirmacao('O problema foi resolvido? Marcar como FEITO.', 'concluido', ${pdv.id})">✔ Marcar como Feito</button>
+                        <button class="btn-primario" style="background:#28a745; width: 100%;" onclick="pedirConfirmacao('${isSub ? 'O problema foi resolvido? Marcar como UTILIZADO.' : 'O problema foi resolvido? Marcar como FEITO.'}', 'concluido', ${pdv.id})">${textoMarcarFeito}</button>
                     `;
                 }
 
                 card.innerHTML = `
-                    <h4>${pdv.nome}</h4>
+                    <h4>${pdv.nome} ${badgeHtml}</h4>
                     <p>PDV: ${pdv.numero_pdv}</p>
                     <p>${pdv.endereco}</p>
                     <div style="display: flex; gap: 5px;">
@@ -399,6 +438,9 @@
             const coordenadasUsadas = {};
 
             todosOsPdvs.forEach(pdv => {
+                const isSub = pdv.pad_sub && pdv.pad_sub.toLowerCase() === 'sub';
+                if (isSub && !mostrarSubstituicao) return; // Esconde do mapa se o toggle estiver desligado
+
                 if (pdv.lat && pdv.lon) {
                     let lat = parseFloat(pdv.lat);
                     let lon = parseFloat(pdv.lon);
@@ -418,20 +460,28 @@
                         coordenadasUsadas[chaveCoord] = 1;
                     }
 
+                    const prefixoClasse = isSub ? 'sub-' : '';
+                    const classeCardEPino = prefixoClasse + pdv.status; 
+
                     const icon = L.divIcon({ 
-                        className: 'pin-' + pdv.status, 
+                        className: 'pin-' + classeCardEPino, 
                         html: '<div class="custom-pin"></div>', 
                         iconSize: [30, 30], 
                         iconAnchor: [15, 30] 
                     });
 
+                    const badgeHtml = isSub ? `<span style="background:#fd7e14; color:white; padding:2px 6px; border-radius:4px; font-size:10px; margin-left:5px;">SUBSTITUIÇÃO</span>` : '';
+                    const textoMarcarFeito = isSub ? '✔ Marcar como Utilizado' : '✔ Marcar Concluído';
+                    let statusLabel = pdv.status.toUpperCase();
+                    if (isSub && pdv.status === 'concluido') statusLabel = 'UTILIZADO';
+
                     L.marker([lat, lon], { icon }).addTo(camadaPdvs)
                     .bindPopup(`
                         <div id="popup-container-${pdv.id}">
-                            <b>${pdv.numero_pdv} - ${pdv.nome}</b><br>
-                            Status: <b>${pdv.status.toUpperCase()}</b><br>
+                            <b>${pdv.numero_pdv} - ${pdv.nome}</b> ${badgeHtml}<br>
+                            Status: <b>${statusLabel}</b><br>
                             <hr>
-                            <button class="btn-primario" style="background:#28a745; width:100%;" onclick="pedirConfirmacao('Marcar este PDV como CONCLUÍDO?', 'concluido', ${pdv.id})">✔ Marcar Concluído</button>
+                            <button class="btn-primario" style="background:#28a745; width:100%;" onclick="pedirConfirmacao('${isSub ? 'Marcar como UTILIZADO?' : 'Marcar este PDV como CONCLUÍDO?'}', 'concluido', ${pdv.id})">${textoMarcarFeito}</button>
                             <button class="btn-primario" style="background:#dc3545; width:100%; margin-top:5px;" onclick="pedirConfirmacao('Reportar ERRO neste PDV?', 'problema', ${pdv.id})">✖ Relatar Problema</button>
                             <button class="btn-primario" style="background:#ffc107; color:#333; width:100%; margin-top:5px;" onclick="abrirEdicaoPdv(event, ${pdv.id})">✏️ Editar PDV</button>
                         </div>
@@ -446,6 +496,8 @@
             const pdv = todosOsPdvs.find(p => p.id == id);
             if (!pdv) return;
 
+            const isSub = pdv.pad_sub && pdv.pad_sub.toLowerCase() === 'sub';
+
             setTimeout(() => {
                 const container = document.getElementById(`popup-container-${id}`);
                 if (!container) return;
@@ -457,7 +509,7 @@
                         <label>Status:</label>
                         <select id="edit-status-${id}">
                             <option value="pendente" ${pdv.status === 'pendente' ? 'selected' : ''}>Pendente</option>
-                            <option value="concluido" ${pdv.status === 'concluido' ? 'selected' : ''}>Concluído</option>
+                            <option value="concluido" ${pdv.status === 'concluido' ? 'selected' : ''}>${isSub ? 'Utilizado' : 'Concluído'}</option>
                             <option value="problema" ${pdv.status === 'problema' ? 'selected' : ''}>Problema (Erro)</option>
                         </select>
 
